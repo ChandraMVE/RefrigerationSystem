@@ -47,6 +47,9 @@ class RefrigerationController:
         if not line:
             return
 
+        if self._is_protocol_response(line):
+            return
+
         if line.startswith("SET ") and "=" in line:
             _, payload = line.split(" ", 1)
             key, raw_value = payload.split("=", 1)
@@ -76,6 +79,9 @@ class RefrigerationController:
     def _process_io_uart(self) -> None:
         line = self.io_uart.read_line()
         if not line:
+            return
+
+        if self._is_protocol_response(line):
             return
 
         if line.startswith("SET_SENSOR ") and "=" in line:
@@ -162,3 +168,7 @@ class RefrigerationController:
         if isinstance(value, bool):
             return "1" if value else "0"
         return str(value)
+
+    @staticmethod
+    def _is_protocol_response(line: str) -> bool:
+        return line.startswith(("ACK ", "ERR ", "STATUS ", "CONFIG ", "IO "))
