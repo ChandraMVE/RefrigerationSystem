@@ -35,6 +35,7 @@ class MockUART:
 
     rx_queue: Deque[str] = field(default_factory=deque)
     tx_queue: Deque[str] = field(default_factory=deque)
+    _tx_echo_queue: Deque[str] = field(default_factory=deque, init=False, repr=False)
     _serial_port: object | None = field(default=None, init=False, repr=False)
 
     @property
@@ -53,7 +54,13 @@ class MockUART:
             else:
                 decoded = payload.decode("utf-8", errors="ignore").strip()
                 if decoded:
-                    return decoded
+                    if self._tx_echo_queue and decoded == self._tx_echo_queue[0]:
+                        self._tx_echo_queue.popleft()
+                    else:
+                        return decoded
+
+        while self._tx_echo_queue and self._tx_echo_queue[0] == "":
+            self._tx_echo_queue.popleft()
 
         if not self.rx_queue:
             return None
@@ -66,6 +73,7 @@ class MockUART:
         if self._serial_port is not None:
             try:
                 self._serial_port.write(f"{payload}\n".encode("utf-8"))
+                self._tx_echo_queue.append(payload)
             except SerialException:
                 self.close_serial()
 
@@ -116,6 +124,7 @@ class MockUART:
             return False, str(exc)
 
         self._serial_port = None
+        self._tx_echo_queue.clear()
         return True, "Port closed"
 
     @staticmethod
