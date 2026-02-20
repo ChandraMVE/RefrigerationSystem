@@ -8,6 +8,7 @@ from dataclasses import fields
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import (
     QApplication,
+    QComboBox,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -26,6 +27,9 @@ from .uart import MockUART
 
 
 class UARTTab(QWidget):
+    BAUD_RATES = ["1200", "2400", "4800", "9600", "19200", "38400", "57600", "115200"]
+    DATA_BITS = ["5", "6", "7", "8"]
+
     def __init__(self, label: str, uart: MockUART) -> None:
         super().__init__()
         self.label = label
@@ -33,9 +37,18 @@ class UARTTab(QWidget):
 
         root_layout = QVBoxLayout(self)
 
+        inner_tabs = QTabWidget()
+        inner_tabs.addTab(self._build_console_tab(), "Console")
+        inner_tabs.addTab(self._build_config_tab(), "UART Configuration")
+        root_layout.addWidget(inner_tabs)
+
+    def _build_console_tab(self) -> QWidget:
+        panel = QWidget()
+        root_layout = QVBoxLayout(panel)
+
         send_layout = QHBoxLayout()
         self.input_line = QLineEdit()
-        self.input_line.setPlaceholderText(f"Enter {label} command")
+        self.input_line.setPlaceholderText(f"Enter {self.label} command")
         send_button = QPushButton("Send")
         send_button.clicked.connect(self.send_message)
         self.input_line.returnPressed.connect(self.send_message)
@@ -45,10 +58,10 @@ class UARTTab(QWidget):
 
         root_layout.addLayout(send_layout)
 
-        if label == "Monitor UART":
+        if self.label == "Monitor UART":
             root_layout.addWidget(QLabel("Configuration Quick Actions"))
             root_layout.addLayout(self._build_monitor_controls())
-        elif label == "IO UART":
+        elif self.label == "IO UART":
             root_layout.addWidget(QLabel("IO Quick Actions"))
             root_layout.addLayout(self._build_io_controls())
 
@@ -63,6 +76,84 @@ class UARTTab(QWidget):
         self.output_log = QTextEdit()
         self.output_log.setReadOnly(True)
         root_layout.addWidget(self.output_log)
+        return panel
+
+    def _build_config_tab(self) -> QWidget:
+        panel = QWidget()
+        layout = QGridLayout(panel)
+
+        self.port_combo = QComboBox()
+        self.port_combo.setEditable(True)
+        self.baud_combo = QComboBox()
+        self.baud_combo.addItems(self.BAUD_RATES)
+        self.baud_combo.setCurrentText("115200")
+
+        self.bits_combo = QComboBox()
+        self.bits_combo.addItems(self.DATA_BITS)
+        self.bits_combo.setCurrentText("8")
+
+        refresh_button = QPushButton("Refresh Ports")
+        refresh_button.clicked.connect(self.refresh_ports)
+
+        self.open_button = QPushButton("OPEN")
+        self.open_button.clicked.connect(self.open_port)
+
+        self.close_button = QPushButton("CLOSE")
+        self.close_button.clicked.connect(self.close_port)
+
+        self.connection_status = QLabel("Port closed")
+
+        layout.addWidget(QLabel("Port"), 0, 0)
+        layout.addWidget(self.port_combo, 0, 1)
+        layout.addWidget(refresh_button, 0, 2)
+
+        layout.addWidget(QLabel("Baudrate"), 1, 0)
+        layout.addWidget(self.baud_combo, 1, 1)
+
+        layout.addWidget(QLabel("Bits"), 2, 0)
+        layout.addWidget(self.bits_combo, 2, 1)
+
+        action_layout = QHBoxLayout()
+        action_layout.addWidget(self.open_button)
+        action_layout.addWidget(self.close_button)
+        layout.addLayout(action_layout, 3, 1)
+
+        layout.addWidget(QLabel("Status"), 4, 0)
+        layout.addWidget(self.connection_status, 4, 1, 1, 2)
+
+        self.refresh_ports()
+        return panel
+
+    def refresh_ports(self) -> None:
+        current_port = self.port_combo.currentText().strip()
+        ports = self.uart.list_serial_ports()
+
+        self.port_combo.clear()
+        self.port_combo.addItems(ports)
+
+        if current_port:
+            self.port_combo.setCurrentText(current_port)
+
+        if not ports and not current_port:
+            self.connection_status.setText("No UART ports found (or pyserial missing)")
+
+    def open_port(self) -> None:
+        port = self.port_combo.currentText().strip()
+        if not port:
+            self.connection_status.setText("Select a port before opening")
+            return
+
+        baudrate = int(self.baud_combo.currentText())
+        bits = int(self.bits_combo.currentText())
+        success, message = self.uart.open_serial(port, baudrate, bits)
+        self.connection_status.setText(message)
+        if success:
+            self.output_log.append(f"* {message}")
+
+    def close_port(self) -> None:
+        _, message = self.uart.close_serial()
+        self.connection_status.setText(message)
+        self.output_log.append(f"* {message}")
 
     def _build_monitor_controls(self) -> QGridLayout:
         layout = QGridLayout()
