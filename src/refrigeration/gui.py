@@ -52,7 +52,14 @@ class UARTTab(QWidget):
             root_layout.addWidget(QLabel("IO Quick Actions"))
             root_layout.addLayout(self._build_io_controls())
 
-        root_layout.addWidget(QLabel("TX Output"))
+        tx_header_layout = QHBoxLayout()
+        tx_header_layout.addWidget(QLabel("TX Output"))
+        clear_button = QPushButton("Clear")
+        clear_button.clicked.connect(self.clear_output_log)
+        tx_header_layout.addWidget(clear_button)
+        tx_header_layout.addStretch()
+        root_layout.addLayout(tx_header_layout)
+
         self.output_log = QTextEdit()
         self.output_log.setReadOnly(True)
         root_layout.addWidget(self.output_log)
@@ -161,6 +168,9 @@ class UARTTab(QWidget):
     def append_tx(self, lines: list[str]) -> None:
         for line in lines:
             self.output_log.append(f"< TX: {line}")
+
+    def clear_output_log(self) -> None:
+        self.output_log.clear()
 
 
 class UARTWindow(QMainWindow):
