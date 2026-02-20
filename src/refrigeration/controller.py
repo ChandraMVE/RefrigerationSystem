@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import time
 from dataclasses import asdict, dataclass
 
@@ -57,11 +56,15 @@ class RefrigerationController:
             return
 
         if line == "GET CONFIG":
-            self.monitor_uart.write_line(f"CONFIG {json.dumps(asdict(self.config))}")
+            self.monitor_uart.write_line(
+                f"CONFIG {self._format_key_values(asdict(self.config))}"
+            )
             return
 
         if line == "GET STATUS":
-            self.monitor_uart.write_line(f"STATUS {json.dumps(self._status_payload())}")
+            self.monitor_uart.write_line(
+                f"STATUS {self._format_key_values(self._status_payload())}"
+            )
             return
 
         self.monitor_uart.write_line(f"ERR unknown_command:{line}")
@@ -92,7 +95,7 @@ class RefrigerationController:
             return
 
         if line == "GET IO":
-            self.io_uart.write_line(f"IO {json.dumps(asdict(self.io))}")
+            self.io_uart.write_line(f"IO {self._format_key_values(asdict(self.io))}")
             return
 
         self.io_uart.write_line(f"ERR unknown_command:{line}")
@@ -127,4 +130,26 @@ class RefrigerationController:
         }
 
     def _publish_status(self) -> None:
-        self.monitor_uart.write_line(f"STATUS {json.dumps(self._status_payload())}")
+        self.monitor_uart.write_line(
+            f"STATUS {self._format_key_values(self._status_payload())}"
+        )
+
+    def _format_key_values(self, payload: dict) -> str:
+        entries = self._flatten_payload(payload)
+        return ", ".join(f"{key}={value}" for key, value in entries)
+
+    def _flatten_payload(self, payload: dict, prefix: str = "") -> list[tuple[str, str]]:
+        output: list[tuple[str, str]] = []
+        for key, value in payload.items():
+            full_key = f"{prefix}.{key}" if prefix else key
+            if isinstance(value, dict):
+                output.extend(self._flatten_payload(value, full_key))
+            else:
+                output.append((full_key, self._format_value(value)))
+        return output
+
+    @staticmethod
+    def _format_value(value: object) -> str:
+        if isinstance(value, bool):
+            return "1" if value else "0"
+        return str(value)

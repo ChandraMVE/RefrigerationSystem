@@ -14,8 +14,8 @@ Later we can evolve this into fixed-width or binary framing for C.
 
 ### Outgoing responses
 - `ACK <field>=<value>`
-- `CONFIG <json>`
-- `STATUS <json>`
+- `CONFIG <key=value, ...>`
+- `STATUS <key=value, ...>`
 - `ERR <reason>`
 
 ## 2. UART_IO_MIMIC
@@ -27,7 +27,7 @@ Later we can evolve this into fixed-width or binary framing for C.
 
 ### Outgoing responses
 - `ACK <field>=<value>`
-- `IO <json>`
+- `IO <key=value, ...>`
 - `ERR <reason>`
 
 ## 3. Notes
