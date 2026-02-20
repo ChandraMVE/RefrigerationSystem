@@ -23,6 +23,8 @@ Later we can evolve this into fixed-width or binary framing for C.
 - `SET_SENSOR air_temp_c=<float>`
 - `SET_INPUT door_open=<0|1>`
 - `SET_INPUT power_ok=<0|1>`
+- `SET_INPUT motion_detected=<0|1>`
+- `SET_INPUT panic_button_pressed=<0|1>`
 - `GET IO`
 
 ### Outgoing responses

@@ -110,9 +110,33 @@ class UARTTab(QWidget):
         power_off_button.clicked.connect(lambda: self._inject_and_log("SET_INPUT power_ok=0"))
         layout.addWidget(power_off_button, 2, 1)
 
+        motion_detected_button = QPushButton("Motion Detected")
+        motion_detected_button.clicked.connect(
+            lambda: self._inject_and_log("SET_INPUT motion_detected=1")
+        )
+        layout.addWidget(motion_detected_button, 3, 0)
+
+        motion_clear_button = QPushButton("Motion Clear")
+        motion_clear_button.clicked.connect(
+            lambda: self._inject_and_log("SET_INPUT motion_detected=0")
+        )
+        layout.addWidget(motion_clear_button, 3, 1)
+
+        panic_press_button = QPushButton("Press Panic Button")
+        panic_press_button.clicked.connect(
+            lambda: self._inject_and_log("SET_INPUT panic_button_pressed=1")
+        )
+        layout.addWidget(panic_press_button, 4, 0)
+
+        panic_reset_button = QPushButton("Reset Panic Button")
+        panic_reset_button.clicked.connect(
+            lambda: self._inject_and_log("SET_INPUT panic_button_pressed=0")
+        )
+        layout.addWidget(panic_reset_button, 4, 1)
+
         get_io_button = QPushButton("Get IO")
         get_io_button.clicked.connect(lambda: self._inject_and_log("GET IO"))
-        layout.addWidget(get_io_button, 3, 0)
+        layout.addWidget(get_io_button, 5, 0)
 
         return layout
 

@@ -14,7 +14,10 @@ class IOState:
     air_temp_c: float = 8.0
     door_open: bool = False
     power_ok: bool = True
+    motion_detected: bool = False
+    panic_button_pressed: bool = False
     compressor_on: bool = False
+    panic_alarm_on: bool = False
 
 
 class RefrigerationController:
@@ -88,7 +91,7 @@ class RefrigerationController:
         if line.startswith("SET_INPUT ") and "=" in line:
             _, payload = line.split(" ", 1)
             key, raw_value = payload.split("=", 1)
-            if key in {"door_open", "power_ok"}:
+            if key in {"door_open", "power_ok", "motion_detected", "panic_button_pressed"}:
                 setattr(self.io, key, bool(int(raw_value)))
                 self.io_uart.write_line(f"ACK {key}={int(getattr(self.io, key))}")
             else:
@@ -103,6 +106,9 @@ class RefrigerationController:
 
     def _run_control_logic(self) -> None:
         now = time.time()
+
+        self.io.panic_alarm_on = self.io.panic_button_pressed
+
         if not self.io.power_ok:
             self._set_compressor(False, now)
             return
