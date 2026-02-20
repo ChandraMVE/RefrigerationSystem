@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
 
 from .config import ControlConfig
 from .controller import RefrigerationController
+from .sck import SCKCommand, build_command_line
 from .uart import MockUART
 
 
@@ -173,11 +174,15 @@ class UARTTab(QWidget):
             layout.addWidget(set_button, row, 2)
 
         get_config_button = QPushButton("Get Config")
-        get_config_button.clicked.connect(lambda: self._inject_and_log("GET CONFIG"))
+        get_config_button.clicked.connect(
+            lambda: self._inject_sck_and_log(SCKCommand.MONITOR_GET_CONFIG)
+        )
         layout.addWidget(get_config_button, len(self.config_inputs), 0)
 
         get_status_button = QPushButton("Get Status")
-        get_status_button.clicked.connect(lambda: self._inject_and_log("GET STATUS"))
+        get_status_button.clicked.connect(
+            lambda: self._inject_sck_and_log(SCKCommand.MONITOR_GET_STATUS)
+        )
         layout.addWidget(get_status_button, len(self.config_inputs), 1)
         return layout
 
@@ -189,59 +194,73 @@ class UARTTab(QWidget):
         layout.addWidget(temp_input, 0, 1)
         temp_button = QPushButton("Set Sensor")
         temp_button.clicked.connect(
-            lambda: self._inject_and_log(f"SET_SENSOR air_temp_c={temp_input.text().strip()}")
+            lambda: self._inject_sck_and_log(
+                SCKCommand.IO_SET_SENSOR,
+                f"air_temp_c={temp_input.text().strip()}",
+            )
         )
         layout.addWidget(temp_button, 0, 2)
 
         door_open_button = QPushButton("Door Open")
-        door_open_button.clicked.connect(lambda: self._inject_and_log("SET_INPUT door_open=1"))
+        door_open_button.clicked.connect(
+            lambda: self._inject_sck_and_log(SCKCommand.IO_SET_INPUT, "door_open=1")
+        )
         layout.addWidget(door_open_button, 1, 0)
 
         door_closed_button = QPushButton("Door Closed")
-        door_closed_button.clicked.connect(lambda: self._inject_and_log("SET_INPUT door_open=0"))
+        door_closed_button.clicked.connect(
+            lambda: self._inject_sck_and_log(SCKCommand.IO_SET_INPUT, "door_open=0")
+        )
         layout.addWidget(door_closed_button, 1, 1)
 
         power_on_button = QPushButton("Power OK")
-        power_on_button.clicked.connect(lambda: self._inject_and_log("SET_INPUT power_ok=1"))
+        power_on_button.clicked.connect(
+            lambda: self._inject_sck_and_log(SCKCommand.IO_SET_INPUT, "power_ok=1")
+        )
         layout.addWidget(power_on_button, 2, 0)
 
         power_off_button = QPushButton("Power Fail")
-        power_off_button.clicked.connect(lambda: self._inject_and_log("SET_INPUT power_ok=0"))
+        power_off_button.clicked.connect(
+            lambda: self._inject_sck_and_log(SCKCommand.IO_SET_INPUT, "power_ok=0")
+        )
         layout.addWidget(power_off_button, 2, 1)
 
         motion_detected_button = QPushButton("Motion Detected")
         motion_detected_button.clicked.connect(
-            lambda: self._inject_and_log("SET_INPUT motion_detected=1")
+            lambda: self._inject_sck_and_log(SCKCommand.IO_SET_INPUT, "motion_detected=1")
         )
         layout.addWidget(motion_detected_button, 3, 0)
 
         motion_clear_button = QPushButton("Motion Clear")
         motion_clear_button.clicked.connect(
-            lambda: self._inject_and_log("SET_INPUT motion_detected=0")
+            lambda: self._inject_sck_and_log(SCKCommand.IO_SET_INPUT, "motion_detected=0")
         )
         layout.addWidget(motion_clear_button, 3, 1)
 
         panic_press_button = QPushButton("Press Panic Button")
         panic_press_button.clicked.connect(
-            lambda: self._inject_and_log("SET_INPUT panic_button_pressed=1")
+            lambda: self._inject_sck_and_log(SCKCommand.IO_SET_INPUT, "panic_button_pressed=1")
         )
         layout.addWidget(panic_press_button, 4, 0)
 
         panic_reset_button = QPushButton("Reset Panic Button")
         panic_reset_button.clicked.connect(
-            lambda: self._inject_and_log("SET_INPUT panic_button_pressed=0")
+            lambda: self._inject_sck_and_log(SCKCommand.IO_SET_INPUT, "panic_button_pressed=0")
         )
         layout.addWidget(panic_reset_button, 4, 1)
 
         get_io_button = QPushButton("Get IO")
-        get_io_button.clicked.connect(lambda: self._inject_and_log("GET IO"))
+        get_io_button.clicked.connect(lambda: self._inject_sck_and_log(SCKCommand.IO_GET_IO))
         layout.addWidget(get_io_button, 5, 0)
 
         return layout
 
     def _send_config_value(self, key: str) -> None:
         value = self.config_inputs[key].text().strip()
-        self._inject_and_log(f"SET {key}={value}")
+        self._inject_sck_and_log(SCKCommand.MONITOR_SET_CONFIG, f"{key}={value}")
+
+    def _inject_sck_and_log(self, command: int, payload_text: str = "") -> None:
+        self._inject_and_log(build_command_line(command, payload_text))
 
     def _inject_and_log(self, message: str) -> None:
         if not message:

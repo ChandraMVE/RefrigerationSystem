@@ -6,6 +6,7 @@ import time
 from dataclasses import asdict, dataclass
 
 from .config import ControlConfig, WalkInDimensionsFt
+from .sck import SCKCommand, SCKError, build_status_line, parse_hex_line
 from .uart import UARTTransport
 
 
@@ -47,6 +48,13 @@ class RefrigerationController:
         if not line:
             return
 
+        sck_frame = self._parse_sck_frame(line)
+        if sck_frame is not None:
+            if sck_frame.frame_type == "S":
+                return
+            self._handle_monitor_sck_command(sck_frame.command, sck_frame.payload, sck_frame.tid)
+            return
+
         if self._is_protocol_response(line):
             return
 
@@ -79,6 +87,13 @@ class RefrigerationController:
     def _process_io_uart(self) -> None:
         line = self.io_uart.read_line()
         if not line:
+            return
+
+        sck_frame = self._parse_sck_frame(line)
+        if sck_frame is not None:
+            if sck_frame.frame_type == "S":
+                return
+            self._handle_io_sck_command(sck_frame.command, sck_frame.payload, sck_frame.tid)
             return
 
         if self._is_protocol_response(line):
@@ -172,3 +187,95 @@ class RefrigerationController:
     @staticmethod
     def _is_protocol_response(line: str) -> bool:
         return line.startswith(("ACK ", "ERR ", "STATUS ", "CONFIG ", "IO "))
+
+    @staticmethod
+    def _parse_sck_frame(line: str):
+        try:
+            return parse_hex_line(line)
+        except SCKError:
+            return None
+
+    def _handle_monitor_sck_command(self, command: int, payload: bytes, tid: int) -> None:
+        payload_text = payload.decode("utf-8", errors="ignore")
+
+        if command == SCKCommand.MONITOR_SET_CONFIG and "=" in payload_text:
+            key, raw_value = payload_text.split("=", 1)
+            if hasattr(self.config, key):
+                current = getattr(self.config, key)
+                typed_value = type(current)(raw_value)
+                setattr(self.config, key, typed_value)
+                self.monitor_uart.write_line(
+                    build_status_line(command, f"ACK {key}={typed_value}", tid=tid)
+                )
+            else:
+                self.monitor_uart.write_line(
+                    build_status_line(command, f"ERR unknown_config:{key}", tid=tid)
+                )
+            return
+
+        if command == SCKCommand.MONITOR_GET_CONFIG:
+            self.monitor_uart.write_line(
+                build_status_line(
+                    command,
+                    f"CONFIG {self._format_key_values(asdict(self.config))}",
+                    tid=tid,
+                )
+            )
+            return
+
+        if command == SCKCommand.MONITOR_GET_STATUS:
+            self.monitor_uart.write_line(
+                build_status_line(
+                    command,
+                    f"STATUS {self._format_key_values(self._status_payload())}",
+                    tid=tid,
+                )
+            )
+            return
+
+        self.monitor_uart.write_line(
+            build_status_line(command, f"ERR unknown_command:{payload_text or command}", tid=tid)
+        )
+
+    def _handle_io_sck_command(self, command: int, payload: bytes, tid: int) -> None:
+        payload_text = payload.decode("utf-8", errors="ignore")
+
+        if command == SCKCommand.IO_SET_SENSOR and "=" in payload_text:
+            key, raw_value = payload_text.split("=", 1)
+            if key == "air_temp_c":
+                self.io.air_temp_c = float(raw_value)
+                self.io_uart.write_line(
+                    build_status_line(command, f"ACK {key}={self.io.air_temp_c}", tid=tid)
+                )
+            else:
+                self.io_uart.write_line(
+                    build_status_line(command, f"ERR unknown_sensor:{key}", tid=tid)
+                )
+            return
+
+        if command == SCKCommand.IO_SET_INPUT and "=" in payload_text:
+            key, raw_value = payload_text.split("=", 1)
+            if key in {"door_open", "power_ok", "motion_detected", "panic_button_pressed"}:
+                setattr(self.io, key, bool(int(raw_value)))
+                self.io_uart.write_line(
+                    build_status_line(command, f"ACK {key}={int(getattr(self.io, key))}", tid=tid)
+                )
+            else:
+                self.io_uart.write_line(
+                    build_status_line(command, f"ERR unknown_input:{key}", tid=tid)
+                )
+            return
+
+        if command == SCKCommand.IO_GET_IO:
+            self.io_uart.write_line(
+                build_status_line(
+                    command,
+                    f"IO {self._format_key_values(asdict(self.io))}",
+                    tid=tid,
+                )
+            )
+            return
+
+        self.io_uart.write_line(
+            build_status_line(command, f"ERR unknown_command:{payload_text or command}", tid=tid)
+        )
