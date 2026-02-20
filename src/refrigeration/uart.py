@@ -37,6 +37,7 @@ class MockUART:
     tx_queue: Deque[str] = field(default_factory=deque)
     _tx_echo_queue: Deque[str] = field(default_factory=deque, init=False, repr=False)
     _serial_port: object | None = field(default=None, init=False, repr=False)
+    _physical_peer: "MockUART | None" = field(default=None, init=False, repr=False)
 
     @property
     def serial_connected(self) -> bool:
@@ -69,6 +70,9 @@ class MockUART:
     def write_line(self, message: str) -> None:
         payload = message.strip()
         self.tx_queue.append(payload)
+
+        if self._physical_peer is not None:
+            self._physical_peer.inject_rx(payload)
 
         if self._serial_port is not None:
             try:
@@ -126,6 +130,17 @@ class MockUART:
         self._serial_port = None
         self._tx_echo_queue.clear()
         return True, "Port closed"
+
+    def connect_physical_peer(self, peer: "MockUART") -> None:
+        self._physical_peer = peer
+        if peer._physical_peer is not self:
+            peer.connect_physical_peer(self)
+
+    def disconnect_physical_peer(self) -> None:
+        peer = self._physical_peer
+        self._physical_peer = None
+        if peer is not None and peer._physical_peer is self:
+            peer._physical_peer = None
 
     @staticmethod
     def list_serial_ports() -> list[str]:
