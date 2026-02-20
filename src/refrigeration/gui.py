@@ -5,7 +5,8 @@ from __future__ import annotations
 import sys
 from dataclasses import fields
 
-from PyQt6.QtCore import QTimer
+from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer
+from PyQt6.QtGui import QColor, QPainter, QPen
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -264,6 +265,78 @@ class UARTTab(QWidget):
         self.output_log.clear()
 
 
+class TemperatureGraphWidget(QWidget):
+    def __init__(self, max_points: int = 120) -> None:
+        super().__init__()
+        self.max_points = max_points
+        self._temperatures: list[float] = []
+        self.setMinimumHeight(260)
+
+    def add_temperature(self, value: float) -> None:
+        self._temperatures.append(value)
+        if len(self._temperatures) > self.max_points:
+            self._temperatures.pop(0)
+        self.update()
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        del event
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        chart_rect = QRectF(50, 20, max(self.width() - 70, 10), max(self.height() - 60, 10))
+        painter.fillRect(chart_rect, QColor("#f7f9fc"))
+
+        grid_pen = QPen(QColor("#e1e6ef"))
+        grid_pen.setStyle(Qt.PenStyle.DashLine)
+        painter.setPen(grid_pen)
+
+        horizontal_lines = 5
+        for index in range(horizontal_lines + 1):
+            y = chart_rect.top() + (index / horizontal_lines) * chart_rect.height()
+            painter.drawLine(
+                int(chart_rect.left()),
+                int(y),
+                int(chart_rect.right()),
+                int(y),
+            )
+
+        axis_pen = QPen(QColor("#596275"))
+        axis_pen.setWidth(2)
+        painter.setPen(axis_pen)
+        painter.drawRect(chart_rect)
+
+        if len(self._temperatures) < 2:
+            painter.setPen(QColor("#596275"))
+            painter.drawText(chart_rect, Qt.AlignmentFlag.AlignCenter, "Waiting for temperature data")
+            return
+
+        minimum = min(self._temperatures)
+        maximum = max(self._temperatures)
+        if minimum == maximum:
+            minimum -= 1.0
+            maximum += 1.0
+
+        series_pen = QPen(QColor("#2d98da"))
+        series_pen.setWidth(2)
+        painter.setPen(series_pen)
+
+        points: list[QPointF] = []
+        x_step = chart_rect.width() / (len(self._temperatures) - 1)
+        for index, value in enumerate(self._temperatures):
+            x = chart_rect.left() + (index * x_step)
+            normalized = (value - minimum) / (maximum - minimum)
+            y = chart_rect.bottom() - (normalized * chart_rect.height())
+            points.append(QPointF(x, y))
+
+        for start, end in zip(points[:-1], points[1:]):
+            painter.drawLine(start, end)
+
+        painter.setPen(QColor("#2d3436"))
+        painter.drawText(8, int(chart_rect.top() + 5), f"{maximum:.1f}°C")
+        painter.drawText(8, int(chart_rect.bottom()), f"{minimum:.1f}°C")
+
+
 class UARTWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -277,9 +350,11 @@ class UARTWindow(QMainWindow):
         tabs = QTabWidget()
         self.monitor_tab = UARTTab("Monitor UART", self.monitor_uart)
         self.io_tab = UARTTab("IO UART", self.io_uart)
+        self.temperature_tab = self._build_temperature_tab()
 
         tabs.addTab(self.monitor_tab, "Monitor UART")
         tabs.addTab(self.io_tab, "IO UART")
+        tabs.addTab(self.temperature_tab, "Room Temperature")
 
         self.setCentralWidget(tabs)
 
@@ -288,10 +363,34 @@ class UARTWindow(QMainWindow):
         self.timer.timeout.connect(self.step_controller)
         self.timer.start()
 
+    def _build_temperature_tab(self) -> QWidget:
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+
+        self.temperature_reading_label = QLabel("Current Room Temperature: -- °C")
+        layout.addWidget(self.temperature_reading_label)
+
+        self.temperature_graph = TemperatureGraphWidget()
+        layout.addWidget(self.temperature_graph)
+
+        helper_text = QLabel(
+            "This trend graph reflects IO sensor updates (air_temp_c). "
+            "PID controls will be added in a future phase."
+        )
+        helper_text.setWordWrap(True)
+        layout.addWidget(helper_text)
+
+        return panel
+
     def step_controller(self) -> None:
         self.controller.step()
         self.monitor_tab.append_tx(self.monitor_uart.drain_tx())
         self.io_tab.append_tx(self.io_uart.drain_tx())
+        current_temperature = self.controller.io.air_temp_c
+        self.temperature_reading_label.setText(
+            f"Current Room Temperature: {current_temperature:.2f} °C"
+        )
+        self.temperature_graph.add_temperature(current_temperature)
 
 
 def run_gui() -> int:
