@@ -31,6 +31,7 @@ class RefrigerationController:
         self.dimensions = dimensions or WalkInDimensionsFt()
         self.io = IOState()
         self.last_compressor_off_s = time.time()
+        self._last_published_status: str | None = None
 
     def step(self) -> None:
         self._process_monitor_uart()
@@ -130,9 +131,11 @@ class RefrigerationController:
         }
 
     def _publish_status(self) -> None:
-        self.monitor_uart.write_line(
-            f"STATUS {self._format_key_values(self._status_payload())}"
-        )
+        status_line = f"STATUS {self._format_key_values(self._status_payload())}"
+        if status_line == self._last_published_status:
+            return
+        self.monitor_uart.write_line(status_line)
+        self._last_published_status = status_line
 
     def _format_key_values(self, payload: dict) -> str:
         entries = self._flatten_payload(payload)
